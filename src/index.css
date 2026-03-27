@@ -1,0 +1,37 @@
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Comme:wght@400;700&family=Inter:wght@400;700&family=Lato:wght@400;600;700&display=swap');
+@import "tailwindcss";
+
+/* Tailwind v4 theme configuration via CSS */
+@theme {
+  /* Font Families */
+  --font-display: 'Comme', sans-serif;
+  --font-heading: 'Inter', sans-serif;
+  --font-body: 'Lato', sans-serif;
+  
+  /* Colors */
+  --color-primary-teal: #45AAB8;
+  --color-dark-navy: #101828;
+  --color-neutral-grey: #575151;
+  --color-neutral-heading: #3C484F;
+  --color-neutral-light: #F9FAFB;
+  --color-neutral-nav: #99A1AF;
+  
+  /* Container Widths */
+  --container-max: 1344px;
+  --container-wrapper: 1536px;
+  
+  /* Spacing */
+  --spacing-section: 80px;
+  --spacing-section-mobile: 48px;
+  
+  /* Border Radius */
+  --radius-card: 12px;
+  --radius-product: 16px;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--color-neutral-grey);
+}
