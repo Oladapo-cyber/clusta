@@ -19,6 +19,28 @@ export interface CreateOrderResult {
   payment_reference: string;
 }
 
+export interface AdminOrderSummaryDTO {
+  id: string;
+  customer_email: string;
+  customer_name: string;
+  customer_phone: string;
+  delivery_address: string;
+  total_kobo: number;
+  status: string;
+  payment_reference: string | null;
+  created_at: string;
+}
+
+export interface AdminOrderDetailsDTO extends AdminOrderSummaryDTO {
+  items: Array<{
+    id: string;
+    product_id: string;
+    product_name: string | null;
+    quantity: number;
+    unit_price_kobo: number;
+  }>;
+}
+
 const generateReference = (): string => `ord_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
 export const createOrder = async (payload: CreateOrderInput): Promise<CreateOrderResult> => {
@@ -97,9 +119,79 @@ export const markOrderPaid = async (payment_reference: string): Promise<void> =>
     .from('orders')
     .update({ status: 'paid' })
     .eq('payment_reference', payment_reference)
-    .neq('status', 'paid');
+    .eq('status', 'pending_payment');
 
   if (error) {
     throw new AppError(`Failed to update order status: ${error.message}`, 500, 'ORDER_STATUS_UPDATE_FAILED');
   }
+};
+
+export const markOrderCompleted = async (id: string): Promise<AdminOrderSummaryDTO> => {
+  const { data, error } = await supabaseAdmin
+    .from('orders')
+    .update({ status: 'completed' })
+    .eq('id', id)
+    .eq('status', 'paid')
+    .select('id,customer_email,customer_name,customer_phone,delivery_address,total_kobo,status,payment_reference,created_at')
+    .maybeSingle();
+
+  if (error) {
+    throw new AppError(`Failed to complete order: ${error.message}`, 500, 'ORDER_COMPLETE_FAILED');
+  }
+
+  if (!data) {
+    throw new AppError('Only paid orders can be marked as completed', 400, 'ORDER_NOT_ELIGIBLE_FOR_COMPLETION');
+  }
+
+  return data as AdminOrderSummaryDTO;
+};
+
+export const listOrdersAdmin = async (): Promise<AdminOrderSummaryDTO[]> => {
+  const { data, error } = await supabaseAdmin
+    .from('orders')
+    .select('id,customer_email,customer_name,customer_phone,delivery_address,total_kobo,status,payment_reference,created_at')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw new AppError(`Failed to fetch orders: ${error.message}`, 500, 'ORDER_FETCH_FAILED');
+  }
+
+  return (data ?? []) as AdminOrderSummaryDTO[];
+};
+
+export const getOrderByIdAdmin = async (id: string): Promise<AdminOrderDetailsDTO> => {
+  const { data: order, error: orderError } = await supabaseAdmin
+    .from('orders')
+    .select('id,customer_email,customer_name,customer_phone,delivery_address,total_kobo,status,payment_reference,created_at')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (orderError) {
+    throw new AppError(`Failed to fetch order: ${orderError.message}`, 500, 'ORDER_FETCH_FAILED');
+  }
+
+  if (!order) {
+    throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+  }
+
+  const { data: items, error: itemsError } = await supabaseAdmin
+    .from('order_items')
+    .select('id,product_id,quantity,unit_price_kobo,products(name)')
+    .eq('order_id', id)
+    .order('created_at', { ascending: true });
+
+  if (itemsError) {
+    throw new AppError(`Failed to fetch order items: ${itemsError.message}`, 500, 'ORDER_ITEMS_FETCH_FAILED');
+  }
+
+  return {
+    ...(order as AdminOrderSummaryDTO),
+    items: (items ?? []).map((item: any) => ({
+      id: item.id,
+      product_id: item.product_id,
+      product_name: item.products?.name ?? null,
+      quantity: item.quantity,
+      unit_price_kobo: item.unit_price_kobo,
+    })),
+  };
 };

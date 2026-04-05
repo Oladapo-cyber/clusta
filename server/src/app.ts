@@ -7,8 +7,13 @@ import { healthRouter } from './routes/health-routes.js';
 import { categoriesRouter } from './routes/categories-routes.js';
 import { productsRouter } from './routes/products-routes.js';
 import { adminProductsRouter } from './routes/admin-products-routes.js';
+import { adminOrdersRouter } from './routes/admin-orders-routes.js';
+import { adminResultsRouter } from './routes/admin-results-routes.js';
+import { adminContactRouter } from './routes/admin-contact-routes.js';
 import { ordersRouter } from './routes/orders-routes.js';
 import { paymentsRouter } from './routes/payments-routes.js';
+import { clustacareRouter } from './routes/clustacare-routes.js';
+import { contactRouter } from './routes/contact-routes.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { notFoundHandler } from './middleware/not-found.js';
 
@@ -36,7 +41,12 @@ app.use('/api/v1', categoriesRouter);
 app.use('/api/v1', productsRouter);
 app.use('/api/v1', ordersRouter);
 app.use('/api/v1', paymentsRouter);
-app.use('/api/v1/admin', adminProductsRouter);
+app.use('/api/v1', clustacareRouter);
+app.use('/api/v1', contactRouter);
+app.use('/api/v1', adminProductsRouter);
+app.use('/api/v1', adminOrdersRouter);
+app.use('/api/v1', adminResultsRouter);
+app.use('/api/v1', adminContactRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

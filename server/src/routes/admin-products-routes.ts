@@ -11,8 +11,8 @@ import {
 export const adminProductsRouter = Router();
 
 adminProductsRouter.use(adminAuth);
-adminProductsRouter.get('/products', getAdminProducts);
-adminProductsRouter.get('/products/:id', getAdminProduct);
-adminProductsRouter.post('/products', postAdminProduct);
-adminProductsRouter.put('/products/:id', putAdminProduct);
-adminProductsRouter.delete('/products/:id', deleteAdminProduct);
+adminProductsRouter.get('/admin/products', getAdminProducts);
+adminProductsRouter.get('/admin/products/:id', getAdminProduct);
+adminProductsRouter.post('/admin/products', postAdminProduct);
+adminProductsRouter.put('/admin/products/:id', putAdminProduct);
+adminProductsRouter.delete('/admin/products/:id', deleteAdminProduct);
