@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { toast } from 'react-hot-toast';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import { submitContactInquiry } from '../services/admin';
 
 const Contact = () => {
   const [formData, setFormData] = useState({
@@ -9,12 +10,20 @@ const Contact = () => {
     email: '',
     message: ''
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Form submitted:', formData);
-    toast.success('Thank you for your message! We\'ll get back to you soon.');
-    setFormData({ name: '', email: '', message: '' });
+    setIsSubmitting(true);
+    try {
+      await submitContactInquiry(formData);
+      toast.success('Thank you for your message! We\'ll get back to you soon.');
+      setFormData({ name: '', email: '', message: '' });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to send message');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -100,9 +109,10 @@ const Contact = () => {
 
                 <button
                   type="submit"
+                  disabled={isSubmitting}
                   className="w-full bg-[#45AAB8] hover:bg-[#3d98a5] text-white py-3.5 px-6 rounded-lg font-body text-sm font-bold transition-colors shadow-sm"
                 >
-                  Send Message
+                  {isSubmitting ? 'Sending...' : 'Send Message'}
                 </button>
               </form>
             </div>

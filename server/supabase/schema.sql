@@ -48,11 +48,14 @@ create table if not exists public.user_profiles (
 create type public.order_status as enum (
   'pending_payment',
   'paid',
+  'completed',
   'processing',
   'shipped',
   'delivered',
   'cancelled'
 );
+
+alter type public.order_status add value if not exists 'completed';
 
 create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),
@@ -70,6 +73,7 @@ create table if not exists public.orders (
 
 create index if not exists idx_orders_user_id on public.orders(user_id);
 create index if not exists idx_orders_status on public.orders(status);
+create index if not exists idx_orders_created_at on public.orders(created_at desc);
 
 -- Order items
 create table if not exists public.order_items (
@@ -106,6 +110,39 @@ create table if not exists public.quiz_responses (
 
 create index if not exists idx_quiz_responses_user_id on public.quiz_responses(user_id);
 
+-- ClustaCare submitted test results
+create type public.clustacare_result_status as enum ('new', 'reviewed', 'follow_up');
+
+create table if not exists public.clustacare_results (
+  id uuid primary key default gen_random_uuid(),
+  test_result text not null check (test_result in ('positive', 'negative', 'invalid')),
+  whatsapp_number text,
+  status public.clustacare_result_status not null default 'new',
+  admin_notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_clustacare_results_created_at on public.clustacare_results(created_at desc);
+create index if not exists idx_clustacare_results_status on public.clustacare_results(status);
+
+-- Contact inquiries from public contact form
+create type public.contact_inquiry_status as enum ('new', 'in_progress', 'resolved', 'spam');
+
+create table if not exists public.contact_inquiries (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  email text not null,
+  message text not null,
+  status public.contact_inquiry_status not null default 'new',
+  admin_notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_contact_inquiries_created_at on public.contact_inquiries(created_at desc);
+create index if not exists idx_contact_inquiries_status on public.contact_inquiries(status);
+
 -- Health records
 create table if not exists public.health_records (
   id uuid primary key default gen_random_uuid(),
@@ -129,6 +166,8 @@ alter table public.order_items enable row level security;
 alter table public.quiz_questions enable row level security;
 alter table public.quiz_responses enable row level security;
 alter table public.health_records enable row level security;
+alter table public.clustacare_results enable row level security;
+alter table public.contact_inquiries enable row level security;
 
 -- Public read access for active catalog data
 create policy "public_read_categories"
@@ -181,3 +220,13 @@ create policy "users_manage_own_health_records"
   to authenticated
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+create policy "public_insert_clustacare_results"
+  on public.clustacare_results for insert
+  to anon, authenticated
+  with check (true);
+
+create policy "public_insert_contact_inquiries"
+  on public.contact_inquiries for insert
+  to anon, authenticated
+  with check (true);

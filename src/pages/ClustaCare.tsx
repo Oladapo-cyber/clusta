@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { toast } from 'react-hot-toast';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import { submitClustaCareResult } from '../services/admin';
 
 const ClustaCare = () => {
   const [formData, setFormData] = useState({
@@ -9,13 +10,23 @@ const ClustaCare = () => {
     whatsappNumber: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle form submission
-    console.log('Form submitted:', formData);
-    toast.success('Thank you for submitting your result!');
-    // Reset form
-    setFormData({ testResult: '', whatsappNumber: '' });
+    setIsSubmitting(true);
+    try {
+      await submitClustaCareResult({
+        test_result: formData.testResult as 'positive' | 'negative' | 'invalid',
+        whatsapp_number: formData.whatsappNumber.trim() || undefined,
+      });
+      toast.success('Thank you for submitting your result!');
+      setFormData({ testResult: '', whatsappNumber: '' });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to submit result');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -166,9 +177,10 @@ const ClustaCare = () => {
                 {/* Submit Button */}
                 <button
                   type="submit"
+                  disabled={isSubmitting}
                   className="w-full bg-[#45AAB8] hover:bg-[#3d98a5] text-white py-3 px-6 rounded-xl font-body font-semibold transition-colors"
                 >
-                  Submit My Result
+                  {isSubmitting ? 'Submitting...' : 'Submit My Result'}
                 </button>
               </form>
             </div>

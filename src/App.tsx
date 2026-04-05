@@ -4,7 +4,11 @@ import Homepage from './pages/Homepage';
 import Shop from './pages/Shop';
 import Quiz from './pages/Quiz';
 import ProductDetails from './pages/ProductDetails';
-import AdminProducts from './pages/AdminProducts';
+import AdminLayout from './pages/admin/AdminLayout';
+import ResultsPage from './pages/admin/ResultsPage';
+import ProductsPage from './pages/admin/ProductsPage';
+import OrdersPage from './pages/admin/OrdersPage';
+import ContactPage from './pages/admin/ContactPage';
 import ClustaCare from './pages/ClustaCare';
 import Contact from './pages/Contact';
 import About from './pages/About';
@@ -43,8 +47,14 @@ function App() {
           <Route path="/shop" element={<Shop />} />
           <Route path="/quiz" element={<Quiz />} />
           <Route path="/product/:id" element={<ProductDetails />} />
+          <Route path="/admin" element={<Navigate to="/admin/products" replace />} />
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route path="results" element={<ResultsPage />} />
+            <Route path="products" element={<ProductsPage />} />
+            <Route path="orders" element={<OrdersPage />} />
+            <Route path="contact" element={<ContactPage />} />
+          </Route>
           <Route path="/admin/*" element={<Navigate to="/admin/products" replace />} />
-          <Route path="/admin/products" element={<AdminProducts />} />
           <Route path="/clusta-care" element={<ClustaCare />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/about" element={<About />} />

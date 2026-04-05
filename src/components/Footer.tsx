@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom';
-import clustaLogo from '../assets/clustalogo.png';
+import clustaLogo from '../assets/footerlogo.png';
 
 const Footer = () => {
+  const currentYear = new Date().getFullYear();
+
   const quickLinks = [
     { name: 'About Us', href: '#' },
     { name: 'Shop', href: '/shop' },
@@ -24,7 +26,7 @@ const Footer = () => {
             <img
               src={clustaLogo}
               alt="Clusta"
-              className="h-12 w-auto mb-4 rounded bg-white px-2 py-1"
+              className="block h-12 w-auto mb-4 object-contain"
               loading="lazy"
               decoding="async"
             />
@@ -83,7 +85,7 @@ const Footer = () => {
         {/* Bottom Bar */}
         <div className="border-t border-gray-700 pt-8 text-center">
           <p className="font-body text-sm text-gray-400">
-            © 2025 Clusta Diagnostics. All rights reserved.
+            © {currentYear} Clusta Diagnostics. All rights reserved.
           </p>
         </div>
       </div>
