@@ -34,6 +34,7 @@ export type Category = typeof CATEGORIES[number];
 
 export interface Product {
   id: string; // slug
+  backendId?: string | null;
   title: string;
   price: string;
   description: string; // Short description for cards
