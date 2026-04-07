@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 
 export interface CartItem {
   id: string | number;
-  backendProductId?: string;
+  backendProductId?: string | null;
   name: string;
   price: string | number;
   image?: string;
