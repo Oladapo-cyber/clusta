@@ -38,11 +38,19 @@ create table if not exists public.user_profiles (
   email text not null unique,
   full_name text,
   phone text,
+  delivery_address text,
+  delivery_location text,
   is_legacy_user boolean not null default false,
   is_activated boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table if exists public.user_profiles
+  add column if not exists delivery_address text;
+
+alter table if exists public.user_profiles
+  add column if not exists delivery_location text;
 
 -- Orders
 create type public.order_status as enum (

@@ -14,6 +14,7 @@ import { ordersRouter } from './routes/orders-routes.js';
 import { paymentsRouter } from './routes/payments-routes.js';
 import { clustacareRouter } from './routes/clustacare-routes.js';
 import { contactRouter } from './routes/contact-routes.js';
+import { userRouter } from './routes/user-routes.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { notFoundHandler } from './middleware/not-found.js';
 
@@ -43,6 +44,7 @@ app.use('/api/v1', ordersRouter);
 app.use('/api/v1', paymentsRouter);
 app.use('/api/v1', clustacareRouter);
 app.use('/api/v1', contactRouter);
+app.use('/api/v1', userRouter);
 app.use('/api/v1', adminProductsRouter);
 app.use('/api/v1', adminOrdersRouter);
 app.use('/api/v1', adminResultsRouter);

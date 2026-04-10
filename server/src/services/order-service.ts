@@ -1,11 +1,24 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { AppError } from '../types/api.js';
+import { ensureUserProfile, updateUserProfile } from './profile-service.js';
 
 export interface CreateOrderInput {
   customer_email: string;
   customer_name: string;
   customer_phone: string;
   delivery_address: string;
+  user_id?: string;
+  items: Array<{
+    product_id: string;
+    quantity: number;
+  }>;
+}
+
+export interface CreateAuthenticatedOrderInput {
+  customer_name?: string | undefined;
+  customer_phone?: string | undefined;
+  delivery_address?: string | undefined;
+  delivery_location?: string | undefined;
   items: Array<{
     product_id: string;
     quantity: number;
@@ -80,6 +93,7 @@ export const createOrder = async (payload: CreateOrderInput): Promise<CreateOrde
   const { data: order, error: orderError } = await supabaseAdmin
     .from('orders')
     .insert({
+      user_id: payload.user_id ?? null,
       customer_email: payload.customer_email,
       customer_name: payload.customer_name,
       customer_phone: payload.customer_phone,
@@ -112,6 +126,47 @@ export const createOrder = async (payload: CreateOrderInput): Promise<CreateOrde
     status: order.status,
     payment_reference: order.payment_reference,
   };
+};
+
+export const createOrderForAuthenticatedUser = async (
+  userId: string,
+  email: string,
+  payload: CreateAuthenticatedOrderInput,
+): Promise<CreateOrderResult> => {
+  const profile = await ensureUserProfile(userId, email);
+
+  const nextName = payload.customer_name?.trim() || profile.full_name || 'Customer';
+  const nextPhone = payload.customer_phone?.trim() || profile.phone || '';
+  const nextDeliveryAddress = payload.delivery_address?.trim() || profile.delivery_address || '';
+  const nextDeliveryLocation = payload.delivery_location?.trim() || profile.delivery_location || '';
+
+  if (!nextPhone) {
+    throw new AppError('Phone number is required for checkout', 400, 'PHONE_REQUIRED');
+  }
+
+  if (!nextDeliveryAddress) {
+    throw new AppError('Delivery address is required for checkout', 400, 'DELIVERY_ADDRESS_REQUIRED');
+  }
+
+  const formattedAddress = nextDeliveryLocation
+    ? `${nextDeliveryAddress}, Lagos ${nextDeliveryLocation}`
+    : nextDeliveryAddress;
+
+  await updateUserProfile(userId, email, {
+    full_name: nextName,
+    phone: nextPhone,
+    delivery_address: nextDeliveryAddress,
+    delivery_location: nextDeliveryLocation || null,
+  });
+
+  return createOrder({
+    user_id: userId,
+    customer_email: email,
+    customer_name: nextName,
+    customer_phone: nextPhone,
+    delivery_address: formattedAddress,
+    items: payload.items,
+  });
 };
 
 export const markOrderPaid = async (payment_reference: string): Promise<void> => {
