@@ -8,6 +8,7 @@ import {
   listProductsAdmin,
   updateProduct,
 } from '../services/product-service.js';
+import { uploadProductImage } from '../services/product-image-service.js';
 
 const productIdSchema = z.string().uuid();
 
@@ -23,6 +24,9 @@ const createProductSchema = z.object({
 });
 
 const updateProductSchema = createProductSchema.partial();
+const uploadImageSchema = z.object({
+  slugHint: z.string().trim().min(1).max(120).optional(),
+});
 
 const omitUndefined = <T extends Record<string, unknown>>(input: T): Partial<T> => {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as Partial<T>;
@@ -43,6 +47,18 @@ export const postAdminProduct = async (req: Request, res: Response): Promise<voi
   const payload = createProductSchema.parse(req.body);
   const product = await createProduct(payload);
   res.status(201).json({ success: true, data: product });
+};
+
+export const postAdminProductImageUpload = async (req: Request, res: Response): Promise<void> => {
+  const file = req.file;
+  if (!file) {
+    throw new AppError('Image file is required', 400, 'IMAGE_FILE_REQUIRED');
+  }
+
+  const { slugHint } = uploadImageSchema.parse(req.body ?? {});
+  const uploadResult = await uploadProductImage(file, slugHint);
+
+  res.status(201).json({ success: true, data: uploadResult });
 };
 
 export const putAdminProduct = async (req: Request, res: Response): Promise<void> => {

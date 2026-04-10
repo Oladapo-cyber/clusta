@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ChangeEvent, DragEvent, FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Archive, Box, PlusCircle, Search, Sparkles } from 'lucide-react';
@@ -11,6 +11,7 @@ import {
   fetchAdminProducts,
   type CategoryDTO,
   type ProductDTO,
+  uploadAdminProductImage,
   updateAdminProduct,
 } from '../services/products';
 
@@ -126,13 +127,35 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [form, setForm] = useState<ProductFormState>(defaultFormState);
+  const [createForm, setCreateForm] = useState<ProductFormState>(defaultFormState);
+  const [editForm, setEditForm] = useState<ProductFormState | null>(null);
   const [orders, setOrders] = useState<AdminOrderSummaryDTO[]>([]);
+  const [isCreateUploadingImage, setIsCreateUploadingImage] = useState(false);
+  const [isEditUploadingImage, setIsEditUploadingImage] = useState(false);
+  const [createUploadPreviewUrl, setCreateUploadPreviewUrl] = useState<string | null>(null);
+  const [editUploadPreviewUrl, setEditUploadPreviewUrl] = useState<string | null>(null);
+  const [isCreateDragActive, setIsCreateDragActive] = useState(false);
+  const [isEditDragActive, setIsEditDragActive] = useState(false);
+  const createImageInputRef = useRef<HTMLInputElement | null>(null);
+  const editImageInputRef = useRef<HTMLInputElement | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'archived'>('all');
 
-  const isEditing = Boolean(form.id);
+  const isEditModalOpen = Boolean(editForm);
+
+  const revokePreviewUrl = (url: string | null): void => {
+    if (url) {
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      revokePreviewUrl(createUploadPreviewUrl);
+      revokePreviewUrl(editUploadPreviewUrl);
+    };
+  }, [createUploadPreviewUrl, editUploadPreviewUrl]);
 
   const loadProducts = async () => {
     setIsLoading(true);
@@ -229,7 +252,10 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
   }, [salesByDay]);
 
   const startEdit = (product: ProductDTO) => {
-    setForm({
+    revokePreviewUrl(editUploadPreviewUrl);
+    setEditUploadPreviewUrl(null);
+    setIsEditDragActive(false);
+    setEditForm({
       id: product.id,
       name: product.name,
       slug: product.slug,
@@ -240,19 +266,129 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
       category_id: product.category_id ?? '',
       is_active: product.is_active,
     });
-  };
-
-  const resetForm = () => {
-    setForm(defaultFormState);
     setErrorMessage(null);
   };
 
-  const handleSave = async (event: FormEvent<HTMLFormElement>) => {
+  const resetCreateForm = () => {
+    revokePreviewUrl(createUploadPreviewUrl);
+    setCreateUploadPreviewUrl(null);
+    setCreateForm(defaultFormState);
+    setIsCreateDragActive(false);
+    setErrorMessage(null);
+  };
+
+  const closeEditModal = () => {
+    revokePreviewUrl(editUploadPreviewUrl);
+    setEditUploadPreviewUrl(null);
+    setEditForm(null);
+    setIsEditDragActive(false);
+    setErrorMessage(null);
+  };
+
+  const openImagePicker = (target: 'create' | 'edit') => {
+    if (target === 'create') {
+      createImageInputRef.current?.click();
+      return;
+    }
+
+    editImageInputRef.current?.click();
+  };
+
+  const uploadImageFile = async (file: File, target: 'create' | 'edit') => {
+    if (!file.type.startsWith('image/')) {
+      setErrorMessage('Only image files are supported.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setErrorMessage('Image must be 5MB or smaller.');
+      return;
+    }
+
+    const activeForm = target === 'create' ? createForm : editForm;
+    if (!activeForm) {
+      setErrorMessage('Open the edit form before uploading an image.');
+      return;
+    }
+
+    const nextPreviewUrl = URL.createObjectURL(file);
+
+    if (target === 'create') {
+      revokePreviewUrl(createUploadPreviewUrl);
+      setCreateUploadPreviewUrl(nextPreviewUrl);
+      setIsCreateUploadingImage(true);
+    } else {
+      revokePreviewUrl(editUploadPreviewUrl);
+      setEditUploadPreviewUrl(nextPreviewUrl);
+      setIsEditUploadingImage(true);
+    }
+
+    setErrorMessage(null);
+
+    try {
+      const slugHint = activeForm.slug.trim() || activeForm.name.trim();
+      const upload = await uploadAdminProductImage(file, slugHint);
+
+      if (target === 'create') {
+        setCreateForm((prev) => ({ ...prev, image_url: upload.url }));
+      } else {
+        setEditForm((prev) => (prev ? { ...prev, image_url: upload.url } : prev));
+      }
+
+      toast.success('Image uploaded and linked to this product.');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to upload image');
+    } finally {
+      if (target === 'create') {
+        setIsCreateUploadingImage(false);
+      } else {
+        setIsEditUploadingImage(false);
+      }
+    }
+  };
+
+  const handleImageInputChange = async (
+    event: ChangeEvent<HTMLInputElement>,
+    target: 'create' | 'edit',
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    await uploadImageFile(file, target);
+    event.target.value = '';
+  };
+
+  const handleImageDrop = async (event: DragEvent<HTMLDivElement>, target: 'create' | 'edit') => {
     event.preventDefault();
+
+    if (target === 'create') {
+      setIsCreateDragActive(false);
+    } else {
+      setIsEditDragActive(false);
+    }
+
+    const file = event.dataTransfer.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    await uploadImageFile(file, target);
+  };
+
+  const handleCreateSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (isCreateUploadingImage) {
+      setErrorMessage('Wait for image upload to finish before saving.');
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage(null);
 
-    const parsedPrice = Number(form.price_kobo);
+    const parsedPrice = Number(createForm.price_kobo);
     if (!Number.isInteger(parsedPrice) || parsedPrice < 0) {
       setErrorMessage('Price must be a whole number in kobo. Example: 17000');
       setIsSubmitting(false);
@@ -260,27 +396,68 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
     }
 
     const payload = {
-      name: form.name.trim(),
-      slug: form.slug.trim() || undefined,
-      description: form.description.trim() || null,
-      full_description: form.full_description.trim() || null,
-      image_url: form.image_url.trim() || null,
+      name: createForm.name.trim(),
+      slug: createForm.slug.trim() || undefined,
+      description: createForm.description.trim() || null,
+      full_description: createForm.full_description.trim() || null,
+      image_url: createForm.image_url.trim() || null,
       price_kobo: parsedPrice,
-      category_id: form.category_id.trim() || null,
-      is_active: form.is_active,
+      category_id: createForm.category_id.trim() || null,
+      is_active: createForm.is_active,
     };
 
     try {
-      if (form.id) {
-        await updateAdminProduct(form.id, payload);
-        toast.success('Product updated');
-      } else {
-        await createAdminProduct(payload);
-        toast.success('Product created');
-      }
+      await createAdminProduct(payload);
+      toast.success('Product created');
 
       await loadProducts();
-      resetForm();
+      resetCreateForm();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to save product');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleEditSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!editForm?.id) {
+      return;
+    }
+
+    if (isEditUploadingImage) {
+      setErrorMessage('Wait for image upload to finish before saving.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    const parsedPrice = Number(editForm.price_kobo);
+    if (!Number.isInteger(parsedPrice) || parsedPrice < 0) {
+      setErrorMessage('Price must be a whole number in kobo. Example: 17000');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const payload = {
+      name: editForm.name.trim(),
+      slug: editForm.slug.trim() || undefined,
+      description: editForm.description.trim() || null,
+      full_description: editForm.full_description.trim() || null,
+      image_url: editForm.image_url.trim() || null,
+      price_kobo: parsedPrice,
+      category_id: editForm.category_id.trim() || null,
+      is_active: editForm.is_active,
+    };
+
+    try {
+      await updateAdminProduct(editForm.id, payload);
+      toast.success('Product updated');
+
+      await loadProducts();
+      closeEditModal();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Failed to save product');
     } finally {
@@ -299,8 +476,8 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
     try {
       await deleteAdminProduct(product.id);
       await loadProducts();
-      if (form.id === product.id) {
-        resetForm();
+      if (editForm?.id === product.id) {
+        closeEditModal();
       }
       toast.success('Product archived');
     } catch (error) {
@@ -552,54 +729,99 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
         <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center gap-2">
             <PlusCircle size={18} className="text-[#45AAB8]" />
-            <h2 className="font-heading text-xl font-bold text-[#101828]">
-              {isEditing ? 'Edit Product' : 'Create Product'}
-            </h2>
+            <h2 className="font-heading text-xl font-bold text-[#101828]">Create Product</h2>
           </div>
 
-          <form className="space-y-3" onSubmit={(event) => void handleSave(event)}>
+          <form className="space-y-3" onSubmit={(event) => void handleCreateSave(event)}>
+            <input
+              ref={createImageInputRef}
+              type="file"
+              accept="image/avif,image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={(event) => void handleImageInputChange(event, 'create')}
+            />
+
+            <div
+              className={`rounded-xl border-2 border-dashed p-3 transition-colors ${
+                isCreateDragActive ? 'border-[#45AAB8] bg-[#E8F7F4]' : 'border-gray-200 bg-[#F9FAFB]'
+              }`}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setIsCreateDragActive(true);
+              }}
+              onDragLeave={() => setIsCreateDragActive(false)}
+              onDrop={(event) => void handleImageDrop(event, 'create')}
+            >
+              {createUploadPreviewUrl || createForm.image_url ? (
+                <img
+                  src={createUploadPreviewUrl ?? createForm.image_url}
+                  alt="Selected product"
+                  className="h-36 w-full rounded-lg object-cover"
+                />
+              ) : (
+                <div className="flex h-36 items-center justify-center rounded-lg bg-white text-sm text-[#6B7280]">
+                  Drop product image here or click Add Image
+                </div>
+              )}
+
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => openImagePicker('create')}
+                  disabled={isCreateUploadingImage}
+                  className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-[#374151] hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {createForm.image_url ? 'Replace Image' : 'Add Image'}
+                </button>
+
+                <span className="text-xs text-[#6B7280]">
+                  {isCreateUploadingImage ? 'Uploading image...' : 'Accepted: AVIF, JPEG, PNG, WEBP (max 5MB)'}
+                </span>
+              </div>
+            </div>
+
             <input
               className="w-full rounded-xl border border-gray-200 bg-[#F9FAFB] px-3 py-2.5 text-sm outline-none focus:border-[#45AAB8]"
               placeholder="Name"
-              value={form.name}
-              onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+              value={createForm.name}
+              onChange={(event) => setCreateForm((prev) => ({ ...prev, name: event.target.value }))}
               required
             />
             <input
               className="w-full rounded-xl border border-gray-200 bg-[#F9FAFB] px-3 py-2.5 text-sm outline-none focus:border-[#45AAB8]"
               placeholder="Slug (optional)"
-              value={form.slug}
-              onChange={(event) => setForm((prev) => ({ ...prev, slug: event.target.value }))}
+              value={createForm.slug}
+              onChange={(event) => setCreateForm((prev) => ({ ...prev, slug: event.target.value }))}
             />
             <input
               className="w-full rounded-xl border border-gray-200 bg-[#F9FAFB] px-3 py-2.5 text-sm outline-none focus:border-[#45AAB8]"
               placeholder="Price in kobo (e.g. 17000)"
-              value={form.price_kobo}
-              onChange={(event) => setForm((prev) => ({ ...prev, price_kobo: event.target.value }))}
+              value={createForm.price_kobo}
+              onChange={(event) => setCreateForm((prev) => ({ ...prev, price_kobo: event.target.value }))}
               required
             />
             <input
               className="w-full rounded-xl border border-gray-200 bg-[#F9FAFB] px-3 py-2.5 text-sm outline-none focus:border-[#45AAB8]"
-              placeholder="Image URL"
-              value={form.image_url}
-              onChange={(event) => setForm((prev) => ({ ...prev, image_url: event.target.value }))}
+              placeholder="Image URL (auto-filled after upload or paste manually)"
+              value={createForm.image_url}
+              onChange={(event) => setCreateForm((prev) => ({ ...prev, image_url: event.target.value }))}
             />
             <textarea
               className="min-h-20 w-full rounded-xl border border-gray-200 bg-[#F9FAFB] px-3 py-2.5 text-sm outline-none focus:border-[#45AAB8]"
               placeholder="Card description"
-              value={form.description}
-              onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
+              value={createForm.description}
+              onChange={(event) => setCreateForm((prev) => ({ ...prev, description: event.target.value }))}
             />
             <textarea
               className="min-h-24 w-full rounded-xl border border-gray-200 bg-[#F9FAFB] px-3 py-2.5 text-sm outline-none focus:border-[#45AAB8]"
               placeholder="Full product description"
-              value={form.full_description}
-              onChange={(event) => setForm((prev) => ({ ...prev, full_description: event.target.value }))}
+              value={createForm.full_description}
+              onChange={(event) => setCreateForm((prev) => ({ ...prev, full_description: event.target.value }))}
             />
             <select
               className="w-full rounded-xl border border-gray-200 bg-[#F9FAFB] px-3 py-2.5 text-sm outline-none focus:border-[#45AAB8]"
-              value={form.category_id}
-              onChange={(event) => setForm((prev) => ({ ...prev, category_id: event.target.value }))}
+              value={createForm.category_id}
+              onChange={(event) => setCreateForm((prev) => ({ ...prev, category_id: event.target.value }))}
             >
               <option value="">No category</option>
               {categories.map((category) => (
@@ -611,34 +833,179 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
             <label className="inline-flex items-center gap-2 text-sm text-[#374151]">
               <input
                 type="checkbox"
-                checked={form.is_active}
-                onChange={(event) => setForm((prev) => ({ ...prev, is_active: event.target.checked }))}
+                checked={createForm.is_active}
+                onChange={(event) => setCreateForm((prev) => ({ ...prev, is_active: event.target.checked }))}
                 className="accent-[#45AAB8]"
               />
               Product is active
             </label>
 
-            <div className="flex gap-2 pt-1">
+            <div className="pt-1">
               <button
                 type="submit"
                 className="flex-1 rounded-xl bg-[#45AAB8] py-2.5 text-sm font-semibold text-white hover:bg-[#3d98a5]"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isCreateUploadingImage}
               >
-                {isEditing ? 'Save Changes' : 'Create Product'}
+                Create Product
               </button>
-              {isEditing && (
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm text-[#374151]"
-                >
-                  Cancel
-                </button>
-              )}
             </div>
           </form>
         </section>
       </div>
+
+      {isEditModalOpen && editForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/45"
+            onClick={closeEditModal}
+            aria-label="Close edit modal"
+          />
+
+          <section className="relative z-10 w-full max-w-2xl rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="font-heading text-xl font-bold text-[#101828]">Edit Product</h2>
+              <button
+                type="button"
+                onClick={closeEditModal}
+                className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-[#374151]"
+                disabled={isEditUploadingImage || isSubmitting}
+              >
+                Close
+              </button>
+            </div>
+
+            <form className="space-y-3" onSubmit={(event) => void handleEditSave(event)}>
+              <input
+                ref={editImageInputRef}
+                type="file"
+                accept="image/avif,image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(event) => void handleImageInputChange(event, 'edit')}
+              />
+
+              <div
+                className={`rounded-xl border-2 border-dashed p-3 transition-colors ${
+                  isEditDragActive ? 'border-[#45AAB8] bg-[#E8F7F4]' : 'border-gray-200 bg-[#F9FAFB]'
+                }`}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setIsEditDragActive(true);
+                }}
+                onDragLeave={() => setIsEditDragActive(false)}
+                onDrop={(event) => void handleImageDrop(event, 'edit')}
+              >
+                {editUploadPreviewUrl || editForm.image_url ? (
+                  <img
+                    src={editUploadPreviewUrl ?? editForm.image_url}
+                    alt="Selected product"
+                    className="h-36 w-full rounded-lg object-cover"
+                  />
+                ) : (
+                  <div className="flex h-36 items-center justify-center rounded-lg bg-white text-sm text-[#6B7280]">
+                    Drop product image here or click Add Image
+                  </div>
+                )}
+
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openImagePicker('edit')}
+                    disabled={isEditUploadingImage}
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-[#374151] hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {editForm.image_url ? 'Replace Image' : 'Add Image'}
+                  </button>
+
+                  <span className="text-xs text-[#6B7280]">
+                    {isEditUploadingImage ? 'Uploading image...' : 'Accepted: AVIF, JPEG, PNG, WEBP (max 5MB)'}
+                  </span>
+                </div>
+              </div>
+
+              <input
+                className="w-full rounded-xl border border-gray-200 bg-[#F9FAFB] px-3 py-2.5 text-sm outline-none focus:border-[#45AAB8]"
+                placeholder="Name"
+                value={editForm.name}
+                onChange={(event) => setEditForm((prev) => (prev ? { ...prev, name: event.target.value } : prev))}
+                required
+              />
+              <input
+                className="w-full rounded-xl border border-gray-200 bg-[#F9FAFB] px-3 py-2.5 text-sm outline-none focus:border-[#45AAB8]"
+                placeholder="Slug (optional)"
+                value={editForm.slug}
+                onChange={(event) => setEditForm((prev) => (prev ? { ...prev, slug: event.target.value } : prev))}
+              />
+              <input
+                className="w-full rounded-xl border border-gray-200 bg-[#F9FAFB] px-3 py-2.5 text-sm outline-none focus:border-[#45AAB8]"
+                placeholder="Price in kobo (e.g. 17000)"
+                value={editForm.price_kobo}
+                onChange={(event) => setEditForm((prev) => (prev ? { ...prev, price_kobo: event.target.value } : prev))}
+                required
+              />
+              <input
+                className="w-full rounded-xl border border-gray-200 bg-[#F9FAFB] px-3 py-2.5 text-sm outline-none focus:border-[#45AAB8]"
+                placeholder="Image URL (auto-filled after upload or paste manually)"
+                value={editForm.image_url}
+                onChange={(event) => setEditForm((prev) => (prev ? { ...prev, image_url: event.target.value } : prev))}
+              />
+              <textarea
+                className="min-h-20 w-full rounded-xl border border-gray-200 bg-[#F9FAFB] px-3 py-2.5 text-sm outline-none focus:border-[#45AAB8]"
+                placeholder="Card description"
+                value={editForm.description}
+                onChange={(event) => setEditForm((prev) => (prev ? { ...prev, description: event.target.value } : prev))}
+              />
+              <textarea
+                className="min-h-24 w-full rounded-xl border border-gray-200 bg-[#F9FAFB] px-3 py-2.5 text-sm outline-none focus:border-[#45AAB8]"
+                placeholder="Full product description"
+                value={editForm.full_description}
+                onChange={(event) =>
+                  setEditForm((prev) => (prev ? { ...prev, full_description: event.target.value } : prev))
+                }
+              />
+              <select
+                className="w-full rounded-xl border border-gray-200 bg-[#F9FAFB] px-3 py-2.5 text-sm outline-none focus:border-[#45AAB8]"
+                value={editForm.category_id}
+                onChange={(event) => setEditForm((prev) => (prev ? { ...prev, category_id: event.target.value } : prev))}
+              >
+                <option value="">No category</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+              <label className="inline-flex items-center gap-2 text-sm text-[#374151]">
+                <input
+                  type="checkbox"
+                  checked={editForm.is_active}
+                  onChange={(event) => setEditForm((prev) => (prev ? { ...prev, is_active: event.target.checked } : prev))}
+                  className="accent-[#45AAB8]"
+                />
+                Product is active
+              </label>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="submit"
+                  className="flex-1 rounded-xl bg-[#45AAB8] py-2.5 text-sm font-semibold text-white hover:bg-[#3d98a5]"
+                  disabled={isSubmitting || isEditUploadingImage}
+                >
+                  Save Changes
+                </button>
+                <button
+                  type="button"
+                  onClick={closeEditModal}
+                  className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm text-[#374151]"
+                  disabled={isSubmitting || isEditUploadingImage}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </div>
   );
 };

@@ -36,6 +36,12 @@ export interface CategoryDTO {
   updated_at: string;
 }
 
+export interface AdminProductImageUploadDTO {
+  bucket: string;
+  path: string;
+  url: string;
+}
+
 const currencyFormatter = new Intl.NumberFormat('en-NG', {
   style: 'currency',
   currency: 'NGN',
@@ -117,6 +123,23 @@ export const updateAdminProduct = async (id: string, payload: Partial<AdminProdu
 export const deleteAdminProduct = async (id: string): Promise<ProductDTO> => {
   return apiRequest<ProductDTO>(`/admin/products/${id}`, {
     method: 'DELETE',
+  });
+};
+
+export const uploadAdminProductImage = async (
+  file: File,
+  slugHint?: string,
+): Promise<AdminProductImageUploadDTO> => {
+  const payload = new FormData();
+  payload.append('image', file);
+
+  if (slugHint?.trim()) {
+    payload.append('slugHint', slugHint.trim());
+  }
+
+  return apiRequest<AdminProductImageUploadDTO>('/admin/products/upload-image', {
+    method: 'POST',
+    body: payload,
   });
 };
 

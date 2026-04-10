@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { AppError } from '../types/api.js';
+import { deleteProductImageByPublicUrl } from './product-image-service.js';
 
 export interface ProductDTO {
   id: string;
@@ -155,6 +156,25 @@ export const createProduct = async (input: CreateProductInput): Promise<ProductD
 };
 
 export const updateProduct = async (id: string, input: UpdateProductInput): Promise<ProductDTO> => {
+  let previousImageUrl: string | null = null;
+  if (input.image_url !== undefined) {
+    const { data: currentProduct, error: currentProductError } = await supabaseAdmin
+      .from('products')
+      .select('image_url')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (currentProductError) {
+      throw new AppError(`Failed to fetch existing product image: ${currentProductError.message}`, 500, 'PRODUCT_FETCH_FAILED');
+    }
+
+    if (!currentProduct) {
+      throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
+    }
+
+    previousImageUrl = currentProduct.image_url;
+  }
+
   const updatePayload: Record<string, unknown> = {};
 
   if (input.name !== undefined) {
@@ -206,6 +226,14 @@ export const updateProduct = async (id: string, input: UpdateProductInput): Prom
 
   if (!data) {
     throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
+  }
+
+  if (input.image_url !== undefined && previousImageUrl && previousImageUrl !== data.image_url) {
+    try {
+      await deleteProductImageByPublicUrl(previousImageUrl);
+    } catch (error) {
+      console.warn((error as Error).message);
+    }
   }
 
   return mapProduct(data);

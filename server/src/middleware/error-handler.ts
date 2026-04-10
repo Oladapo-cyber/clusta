@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
+import { MulterError } from 'multer';
 import { AppError } from '../types/api.js';
 
 export const errorHandler = (
@@ -13,6 +14,18 @@ export const errorHandler = (
       error: {
         message: err.message,
         code: err.code,
+      },
+    });
+    return;
+  }
+
+  if (err instanceof MulterError) {
+    const isTooLarge = err.code === 'LIMIT_FILE_SIZE';
+    res.status(isTooLarge ? 413 : 400).json({
+      success: false,
+      error: {
+        message: isTooLarge ? 'Image must be 5MB or smaller' : err.message,
+        code: isTooLarge ? 'IMAGE_TOO_LARGE' : 'UPLOAD_INVALID',
       },
     });
     return;
