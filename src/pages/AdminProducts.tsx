@@ -28,6 +28,8 @@ interface ProductFormState {
   description: string;
   full_description: string;
   image_url: string;
+  image_url_2: string;
+  image_url_3: string;
   price_kobo: string;
   category_id: string;
   is_active: boolean;
@@ -39,9 +41,56 @@ const defaultFormState: ProductFormState = {
   description: '',
   full_description: '',
   image_url: '',
+  image_url_2: '',
+  image_url_3: '',
   price_kobo: '',
   category_id: '',
   is_active: true,
+};
+
+type ImageSlot = 1 | 2 | 3;
+
+const getImageValueBySlot = (form: ProductFormState, slot: ImageSlot): string => {
+  if (slot === 1) {
+    return form.image_url;
+  }
+
+  if (slot === 2) {
+    return form.image_url_2;
+  }
+
+  return form.image_url_3;
+};
+
+const setImageValueBySlot = (form: ProductFormState, slot: ImageSlot, value: string): ProductFormState => {
+  if (slot === 1) {
+    return { ...form, image_url: value };
+  }
+
+  if (slot === 2) {
+    return { ...form, image_url_2: value };
+  }
+
+  return { ...form, image_url_3: value };
+};
+
+const extractImageUrls = (form: ProductFormState): string[] => {
+  return [form.image_url, form.image_url_2, form.image_url_3]
+    .map((value) => value.trim())
+    .filter((value, index, source) => value.length > 0 && source.indexOf(value) === index)
+    .slice(0, 3);
+};
+
+const getFirstEmptySlot = (form: ProductFormState): ImageSlot => {
+  if (!form.image_url.trim()) {
+    return 1;
+  }
+
+  if (!form.image_url_2.trim()) {
+    return 2;
+  }
+
+  return 3;
 };
 
 const requestArchiveConfirmation = (name: string): Promise<boolean> => {
@@ -136,6 +185,8 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
   const [editUploadPreviewUrl, setEditUploadPreviewUrl] = useState<string | null>(null);
   const [isCreateDragActive, setIsCreateDragActive] = useState(false);
   const [isEditDragActive, setIsEditDragActive] = useState(false);
+  const [createUploadSlot, setCreateUploadSlot] = useState<ImageSlot>(1);
+  const [editUploadSlot, setEditUploadSlot] = useState<ImageSlot>(1);
   const createImageInputRef = useRef<HTMLInputElement | null>(null);
   const editImageInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -252,16 +303,20 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
   }, [salesByDay]);
 
   const startEdit = (product: ProductDTO) => {
+    const imageUrls = (product.image_urls ?? []).slice(0, 3);
     revokePreviewUrl(editUploadPreviewUrl);
     setEditUploadPreviewUrl(null);
     setIsEditDragActive(false);
+    setEditUploadSlot(1);
     setEditForm({
       id: product.id,
       name: product.name,
       slug: product.slug,
       description: product.description ?? '',
       full_description: product.full_description ?? '',
-      image_url: product.image_url ?? '',
+      image_url: imageUrls[0] ?? product.image_url ?? '',
+      image_url_2: imageUrls[1] ?? '',
+      image_url_3: imageUrls[2] ?? '',
       price_kobo: String(product.price_kobo),
       category_id: product.category_id ?? '',
       is_active: product.is_active,
@@ -273,6 +328,7 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
     revokePreviewUrl(createUploadPreviewUrl);
     setCreateUploadPreviewUrl(null);
     setCreateForm(defaultFormState);
+    setCreateUploadSlot(1);
     setIsCreateDragActive(false);
     setErrorMessage(null);
   };
@@ -281,20 +337,23 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
     revokePreviewUrl(editUploadPreviewUrl);
     setEditUploadPreviewUrl(null);
     setEditForm(null);
+    setEditUploadSlot(1);
     setIsEditDragActive(false);
     setErrorMessage(null);
   };
 
-  const openImagePicker = (target: 'create' | 'edit') => {
+  const openImagePicker = (target: 'create' | 'edit', slot: ImageSlot) => {
     if (target === 'create') {
+      setCreateUploadSlot(slot);
       createImageInputRef.current?.click();
       return;
     }
 
+    setEditUploadSlot(slot);
     editImageInputRef.current?.click();
   };
 
-  const uploadImageFile = async (file: File, target: 'create' | 'edit') => {
+  const uploadImageFile = async (file: File, target: 'create' | 'edit', slot: ImageSlot) => {
     if (!file.type.startsWith('image/')) {
       setErrorMessage('Only image files are supported.');
       return;
@@ -330,9 +389,9 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
       const upload = await uploadAdminProductImage(file, slugHint);
 
       if (target === 'create') {
-        setCreateForm((prev) => ({ ...prev, image_url: upload.url }));
+        setCreateForm((prev) => setImageValueBySlot(prev, slot, upload.url));
       } else {
-        setEditForm((prev) => (prev ? { ...prev, image_url: upload.url } : prev));
+        setEditForm((prev) => (prev ? setImageValueBySlot(prev, slot, upload.url) : prev));
       }
 
       toast.success('Image uploaded and linked to this product.');
@@ -356,7 +415,8 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
       return;
     }
 
-    await uploadImageFile(file, target);
+    const slot = target === 'create' ? createUploadSlot : editUploadSlot;
+    await uploadImageFile(file, target, slot);
     event.target.value = '';
   };
 
@@ -374,7 +434,13 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
       return;
     }
 
-    await uploadImageFile(file, target);
+    const activeForm = target === 'create' ? createForm : editForm;
+    if (!activeForm) {
+      return;
+    }
+
+    const slot = getFirstEmptySlot(activeForm);
+    await uploadImageFile(file, target, slot);
   };
 
   const handleCreateSave = async (event: FormEvent<HTMLFormElement>) => {
@@ -400,7 +466,7 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
       slug: createForm.slug.trim() || undefined,
       description: createForm.description.trim() || null,
       full_description: createForm.full_description.trim() || null,
-      image_url: createForm.image_url.trim() || null,
+      image_urls: extractImageUrls(createForm),
       price_kobo: parsedPrice,
       category_id: createForm.category_id.trim() || null,
       is_active: createForm.is_active,
@@ -446,7 +512,7 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
       slug: editForm.slug.trim() || undefined,
       description: editForm.description.trim() || null,
       full_description: editForm.full_description.trim() || null,
-      image_url: editForm.image_url.trim() || null,
+      image_urls: extractImageUrls(editForm),
       price_kobo: parsedPrice,
       category_id: editForm.category_id.trim() || null,
       is_active: editForm.is_active,
@@ -767,17 +833,59 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
               <div className="mt-3 flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => openImagePicker('create')}
+                  onClick={() => openImagePicker('create', getFirstEmptySlot(createForm))}
                   disabled={isCreateUploadingImage}
                   className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-[#374151] hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {createForm.image_url ? 'Replace Image' : 'Add Image'}
+                  Add Next Image
                 </button>
 
                 <span className="text-xs text-[#6B7280]">
-                  {isCreateUploadingImage ? 'Uploading image...' : 'Accepted: AVIF, JPEG, PNG, WEBP (max 5MB)'}
+                  {isCreateUploadingImage ? 'Uploading image...' : 'Accepted: AVIF, JPEG, PNG, WEBP (max 5MB). Max 3 images.'}
                 </span>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              {[1, 2, 3].map((slot) => {
+                const imageSlot = slot as ImageSlot;
+                const value = getImageValueBySlot(createForm, imageSlot);
+
+                return (
+                  <div key={`create-slot-${slot}`} className="rounded-xl border border-gray-200 bg-[#F9FAFB] p-2">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-[#374151]">Image {slot}</p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openImagePicker('create', imageSlot)}
+                          disabled={isCreateUploadingImage}
+                          className="rounded-md border border-gray-200 px-2 py-1 text-[11px] font-semibold text-[#374151]"
+                        >
+                          {value ? 'Replace' : 'Upload'}
+                        </button>
+                        {value && (
+                          <button
+                            type="button"
+                            onClick={() => setCreateForm((prev) => setImageValueBySlot(prev, imageSlot, ''))}
+                            className="rounded-md border border-red-200 px-2 py-1 text-[11px] font-semibold text-red-700"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <input
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs outline-none focus:border-[#45AAB8]"
+                      placeholder={`Image ${slot} URL`}
+                      value={value}
+                      onChange={(event) =>
+                        setCreateForm((prev) => setImageValueBySlot(prev, imageSlot, event.target.value))
+                      }
+                    />
+                  </div>
+                );
+              })}
             </div>
 
             <input
@@ -799,12 +907,6 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
               value={createForm.price_kobo}
               onChange={(event) => setCreateForm((prev) => ({ ...prev, price_kobo: event.target.value }))}
               required
-            />
-            <input
-              className="w-full rounded-xl border border-gray-200 bg-[#F9FAFB] px-3 py-2.5 text-sm outline-none focus:border-[#45AAB8]"
-              placeholder="Image URL (auto-filled after upload or paste manually)"
-              value={createForm.image_url}
-              onChange={(event) => setCreateForm((prev) => ({ ...prev, image_url: event.target.value }))}
             />
             <textarea
               className="min-h-20 w-full rounded-xl border border-gray-200 bg-[#F9FAFB] px-3 py-2.5 text-sm outline-none focus:border-[#45AAB8]"
@@ -910,17 +1012,61 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
                 <div className="mt-3 flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => openImagePicker('edit')}
+                    onClick={() => openImagePicker('edit', getFirstEmptySlot(editForm))}
                     disabled={isEditUploadingImage}
                     className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-[#374151] hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {editForm.image_url ? 'Replace Image' : 'Add Image'}
+                    Add Next Image
                   </button>
 
                   <span className="text-xs text-[#6B7280]">
-                    {isEditUploadingImage ? 'Uploading image...' : 'Accepted: AVIF, JPEG, PNG, WEBP (max 5MB)'}
+                    {isEditUploadingImage ? 'Uploading image...' : 'Accepted: AVIF, JPEG, PNG, WEBP (max 5MB). Max 3 images.'}
                   </span>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                {[1, 2, 3].map((slot) => {
+                  const imageSlot = slot as ImageSlot;
+                  const value = getImageValueBySlot(editForm, imageSlot);
+
+                  return (
+                    <div key={`edit-slot-${slot}`} className="rounded-xl border border-gray-200 bg-[#F9FAFB] p-2">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-[#374151]">Image {slot}</p>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openImagePicker('edit', imageSlot)}
+                            disabled={isEditUploadingImage}
+                            className="rounded-md border border-gray-200 px-2 py-1 text-[11px] font-semibold text-[#374151]"
+                          >
+                            {value ? 'Replace' : 'Upload'}
+                          </button>
+                          {value && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditForm((prev) => (prev ? setImageValueBySlot(prev, imageSlot, '') : prev))
+                              }
+                              className="rounded-md border border-red-200 px-2 py-1 text-[11px] font-semibold text-red-700"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <input
+                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs outline-none focus:border-[#45AAB8]"
+                        placeholder={`Image ${slot} URL`}
+                        value={value}
+                        onChange={(event) =>
+                          setEditForm((prev) => (prev ? setImageValueBySlot(prev, imageSlot, event.target.value) : prev))
+                        }
+                      />
+                    </div>
+                  );
+                })}
               </div>
 
               <input
@@ -942,12 +1088,6 @@ const AdminProducts = ({ embedded = false }: AdminProductsProps) => {
                 value={editForm.price_kobo}
                 onChange={(event) => setEditForm((prev) => (prev ? { ...prev, price_kobo: event.target.value } : prev))}
                 required
-              />
-              <input
-                className="w-full rounded-xl border border-gray-200 bg-[#F9FAFB] px-3 py-2.5 text-sm outline-none focus:border-[#45AAB8]"
-                placeholder="Image URL (auto-filled after upload or paste manually)"
-                value={editForm.image_url}
-                onChange={(event) => setEditForm((prev) => (prev ? { ...prev, image_url: event.target.value } : prev))}
               />
               <textarea
                 className="min-h-20 w-full rounded-xl border border-gray-200 bg-[#F9FAFB] px-3 py-2.5 text-sm outline-none focus:border-[#45AAB8]"

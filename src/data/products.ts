@@ -42,6 +42,7 @@ export interface Product {
   categories: Category[];
   available: boolean;
   image: string; // Path to product image
+  images?: string[];
 }
 
 // Complete product catalog extracted from design requirements

@@ -20,6 +20,7 @@ create table if not exists public.products (
   description text,
   full_description text,
   image_url text,
+  image_urls text[] not null default '{}',
   price_kobo integer not null check (price_kobo >= 0),
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
@@ -28,6 +29,16 @@ create table if not exists public.products (
 
 alter table if exists public.products
   add column if not exists full_description text;
+
+alter table if exists public.products
+  add column if not exists image_urls text[] not null default '{}';
+
+alter table if exists public.products
+  drop constraint if exists products_image_urls_max_3;
+
+alter table if exists public.products
+  add constraint products_image_urls_max_3
+  check (coalesce(array_length(image_urls, 1), 0) <= 3);
 
 create index if not exists idx_products_category_id on public.products(category_id);
 create index if not exists idx_products_is_active on public.products(is_active);

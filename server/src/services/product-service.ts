@@ -9,6 +9,7 @@ export interface ProductDTO {
   description: string | null;
   full_description: string | null;
   image_url: string | null;
+  image_urls: string[];
   price_kobo: number;
   category_id: string | null;
   category_name?: string | null;
@@ -23,6 +24,7 @@ export interface CreateProductInput {
   description?: string | null | undefined;
   full_description?: string | null | undefined;
   image_url?: string | null | undefined;
+  image_urls?: string[] | undefined;
   price_kobo: number;
   category_id?: string | null | undefined;
   is_active?: boolean | undefined;
@@ -34,25 +36,47 @@ export interface UpdateProductInput {
   description?: string | null | undefined;
   full_description?: string | null | undefined;
   image_url?: string | null | undefined;
+  image_urls?: string[] | undefined;
   price_kobo?: number | undefined;
   category_id?: string | null | undefined;
   is_active?: boolean | undefined;
 }
 
-const mapProduct = (row: any): ProductDTO => ({
-  id: row.id,
-  name: row.name,
-  slug: row.slug,
-  description: row.description,
-  full_description: row.full_description,
-  image_url: row.image_url,
-  price_kobo: row.price_kobo,
-  category_id: row.category_id,
-  category_name: row.categories?.name ?? null,
-  is_active: row.is_active,
-  created_at: row.created_at,
-  updated_at: row.updated_at,
-});
+const sanitizeImageUrls = (urls: unknown): string[] => {
+  if (!Array.isArray(urls)) {
+    return [];
+  }
+
+  const cleaned = urls
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => value.trim())
+    .filter((value, index, source) => value.length > 0 && source.indexOf(value) === index);
+
+  return cleaned.slice(0, 3);
+};
+
+const mapProduct = (row: any): ProductDTO => {
+  const imageUrls = sanitizeImageUrls(row.image_urls);
+  if (imageUrls.length === 0 && row.image_url) {
+    imageUrls.push(row.image_url);
+  }
+
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    description: row.description,
+    full_description: row.full_description,
+    image_url: imageUrls[0] ?? null,
+    image_urls: imageUrls,
+    price_kobo: row.price_kobo,
+    category_id: row.category_id,
+    category_name: row.categories?.name ?? null,
+    is_active: row.is_active,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+};
 
 const slugify = (value: string): string =>
   value
@@ -65,7 +89,7 @@ const slugify = (value: string): string =>
 export const listProducts = async (): Promise<ProductDTO[]> => {
   const { data, error } = await supabaseAdmin
     .from('products')
-    .select('id,name,slug,description,full_description,image_url,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
+    .select('id,name,slug,description,full_description,image_url,image_urls,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
     .eq('is_active', true)
     .order('created_at', { ascending: false });
 
@@ -79,7 +103,7 @@ export const listProducts = async (): Promise<ProductDTO[]> => {
 export const getProductById = async (id: string): Promise<ProductDTO> => {
   const { data, error } = await supabaseAdmin
     .from('products')
-    .select('id,name,slug,description,full_description,image_url,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
+    .select('id,name,slug,description,full_description,image_url,image_urls,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
     .eq('id', id)
     .eq('is_active', true)
     .maybeSingle();
@@ -98,7 +122,7 @@ export const getProductById = async (id: string): Promise<ProductDTO> => {
 export const listProductsAdmin = async (): Promise<ProductDTO[]> => {
   const { data, error } = await supabaseAdmin
     .from('products')
-    .select('id,name,slug,description,full_description,image_url,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
+    .select('id,name,slug,description,full_description,image_url,image_urls,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -111,7 +135,7 @@ export const listProductsAdmin = async (): Promise<ProductDTO[]> => {
 export const getProductByIdAdmin = async (id: string): Promise<ProductDTO> => {
   const { data, error } = await supabaseAdmin
     .from('products')
-    .select('id,name,slug,description,full_description,image_url,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
+    .select('id,name,slug,description,full_description,image_url,image_urls,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
     .eq('id', id)
     .maybeSingle();
 
@@ -128,6 +152,10 @@ export const getProductByIdAdmin = async (id: string): Promise<ProductDTO> => {
 
 export const createProduct = async (input: CreateProductInput): Promise<ProductDTO> => {
   const slug = input.slug?.trim() || slugify(input.name);
+  const imageUrls = sanitizeImageUrls(input.image_urls);
+  if (imageUrls.length === 0 && input.image_url?.trim()) {
+    imageUrls.push(input.image_url.trim());
+  }
 
   const { data, error } = await supabaseAdmin
     .from('products')
@@ -136,12 +164,13 @@ export const createProduct = async (input: CreateProductInput): Promise<ProductD
       slug,
       description: input.description ?? null,
       full_description: input.full_description ?? null,
-      image_url: input.image_url ?? null,
+      image_url: imageUrls[0] ?? null,
+      image_urls: imageUrls,
       price_kobo: input.price_kobo,
       category_id: input.category_id ?? null,
       is_active: input.is_active ?? true,
     })
-    .select('id,name,slug,description,full_description,image_url,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
+    .select('id,name,slug,description,full_description,image_url,image_urls,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
     .single();
 
   if (error || !data) {
@@ -156,11 +185,14 @@ export const createProduct = async (input: CreateProductInput): Promise<ProductD
 };
 
 export const updateProduct = async (id: string, input: UpdateProductInput): Promise<ProductDTO> => {
-  let previousImageUrl: string | null = null;
-  if (input.image_url !== undefined) {
+  let previousImageUrls: string[] = [];
+  let nextImageUrls: string[] = [];
+  const updatePayload: Record<string, unknown> = {};
+
+  if (input.image_url !== undefined || input.image_urls !== undefined) {
     const { data: currentProduct, error: currentProductError } = await supabaseAdmin
       .from('products')
-      .select('image_url')
+      .select('image_url,image_urls')
       .eq('id', id)
       .maybeSingle();
 
@@ -172,10 +204,22 @@ export const updateProduct = async (id: string, input: UpdateProductInput): Prom
       throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
     }
 
-    previousImageUrl = currentProduct.image_url;
-  }
+    previousImageUrls = sanitizeImageUrls(currentProduct.image_urls);
+    if (previousImageUrls.length === 0 && currentProduct.image_url) {
+      previousImageUrls.push(currentProduct.image_url);
+    }
 
-  const updatePayload: Record<string, unknown> = {};
+    if (input.image_urls !== undefined) {
+      nextImageUrls = sanitizeImageUrls(input.image_urls);
+      updatePayload.image_urls = nextImageUrls;
+      updatePayload.image_url = nextImageUrls[0] ?? null;
+    } else {
+      const nextSingleImage = input.image_url?.trim() || '';
+      nextImageUrls = nextSingleImage ? [nextSingleImage] : [];
+      updatePayload.image_urls = nextImageUrls;
+      updatePayload.image_url = nextSingleImage || null;
+    }
+  }
 
   if (input.name !== undefined) {
     updatePayload.name = input.name.trim();
@@ -191,10 +235,6 @@ export const updateProduct = async (id: string, input: UpdateProductInput): Prom
 
   if (input.full_description !== undefined) {
     updatePayload.full_description = input.full_description;
-  }
-
-  if (input.image_url !== undefined) {
-    updatePayload.image_url = input.image_url;
   }
 
   if (input.price_kobo !== undefined) {
@@ -213,7 +253,7 @@ export const updateProduct = async (id: string, input: UpdateProductInput): Prom
     .from('products')
     .update(updatePayload)
     .eq('id', id)
-    .select('id,name,slug,description,full_description,image_url,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
+    .select('id,name,slug,description,full_description,image_url,image_urls,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
     .maybeSingle();
 
   if (error) {
@@ -228,11 +268,15 @@ export const updateProduct = async (id: string, input: UpdateProductInput): Prom
     throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
   }
 
-  if (input.image_url !== undefined && previousImageUrl && previousImageUrl !== data.image_url) {
-    try {
-      await deleteProductImageByPublicUrl(previousImageUrl);
-    } catch (error) {
-      console.warn((error as Error).message);
+  if (input.image_url !== undefined || input.image_urls !== undefined) {
+    const removedImageUrls = previousImageUrls.filter((url) => !nextImageUrls.includes(url));
+
+    for (const imageUrl of removedImageUrls) {
+      try {
+        await deleteProductImageByPublicUrl(imageUrl);
+      } catch (error) {
+        console.warn((error as Error).message);
+      }
     }
   }
 

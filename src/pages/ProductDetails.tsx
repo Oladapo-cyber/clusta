@@ -12,6 +12,13 @@ const ProductDetails = () => {
   const { addToCart } = useCart();
   const [product, setProduct] = useState<Product | undefined>(() => (id ? PRODUCTS.find((item) => item.id === id) : undefined));
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [activeImage, setActiveImage] = useState('');
+
+  const productImages = (product?.images && product.images.length > 0
+    ? product.images
+    : product?.image
+      ? [product.image]
+      : []);
 
   useEffect(() => {
     let isMounted = true;
@@ -35,6 +42,17 @@ const ProductDetails = () => {
       isMounted = false;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (productImages.length === 0) {
+      setActiveImage('');
+      return;
+    }
+
+    if (!activeImage || !productImages.includes(activeImage)) {
+      setActiveImage(productImages[0]);
+    }
+  }, [activeImage, productImages]);
 
   if (hasLoaded && !product) {
     return (
@@ -91,12 +109,35 @@ const ProductDetails = () => {
           {/* Two-column layout */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
             {/* Left Column: Product Image */}
-            <div className="bg-[#EDEDED] rounded-xl aspect-square overflow-hidden">
-              <img
-                src={product.image}
-                alt={`${product.title} test kit`}
-                className="w-full h-full object-cover"
-              />
+            <div>
+              <div className="bg-[#EDEDED] rounded-xl aspect-square overflow-hidden">
+                <img
+                  src={activeImage || product.image}
+                  alt={`${product.title} test kit`}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+
+              {productImages.length > 1 && (
+                <div className="mt-4 grid grid-cols-3 gap-3">
+                  {productImages.slice(0, 3).map((imageUrl, index) => {
+                    const isActive = imageUrl === activeImage;
+                    return (
+                      <button
+                        key={`${imageUrl}-${index}`}
+                        type="button"
+                        onClick={() => setActiveImage(imageUrl)}
+                        className={`overflow-hidden rounded-lg border-2 transition-colors ${
+                          isActive ? 'border-[#45AAB8]' : 'border-transparent hover:border-[#9EDAE2]'
+                        }`}
+                        aria-label={`View image ${index + 1}`}
+                      >
+                        <img src={imageUrl} alt={`${product.title} preview ${index + 1}`} className="h-24 w-full object-cover" />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Right Column: Product Info */}

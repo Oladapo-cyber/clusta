@@ -8,6 +8,7 @@ export interface ProductDTO {
   description: string | null;
   full_description: string | null;
   image_url: string | null;
+  image_urls: string[];
   price_kobo: number;
   category_id: string | null;
   category_name: string | null;
@@ -22,6 +23,7 @@ export interface AdminProductInput {
   description?: string | null;
   full_description?: string | null;
   image_url?: string | null;
+  image_urls?: string[];
   price_kobo: number;
   category_id?: string | null;
   is_active?: boolean;
@@ -56,7 +58,12 @@ const normalizeCategory = (value: string | null): Category[] => {
   return CATEGORIES.includes(value as Category) ? [value as Category] : [];
 };
 
-const mapApiProduct = (product: ProductDTO): Product => ({
+const mapApiProduct = (product: ProductDTO): Product => {
+  const normalizedImages = (product.image_urls ?? []).filter((value) => typeof value === 'string' && value.trim().length > 0);
+  const fallbackImage = product.image_url ?? '';
+  const images = normalizedImages.length > 0 ? normalizedImages : fallbackImage ? [fallbackImage] : [];
+
+  return {
   id: product.slug,
   backendId: product.id,
   title: product.name,
@@ -65,8 +72,10 @@ const mapApiProduct = (product: ProductDTO): Product => ({
   fullDescription: product.full_description ?? product.description ?? '',
   categories: normalizeCategory(product.category_name),
   available: product.is_active,
-  image: product.image_url ?? '',
-});
+  image: images[0] ?? '',
+  images,
+  };
+};
 
 const isFallbackNeeded = (products: ProductDTO[]): boolean => products.length === 0;
 

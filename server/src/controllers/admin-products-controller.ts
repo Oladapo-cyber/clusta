@@ -18,6 +18,7 @@ const createProductSchema = z.object({
   description: z.string().nullable().optional(),
   full_description: z.string().nullable().optional(),
   image_url: z.string().url().nullable().optional(),
+  image_urls: z.array(z.string().url()).max(3).optional(),
   price_kobo: z.number().int().nonnegative(),
   category_id: z.string().uuid().nullable().optional(),
   is_active: z.boolean().optional(),
