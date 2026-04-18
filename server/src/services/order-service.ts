@@ -1,12 +1,14 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { AppError } from '../types/api.js';
 import { ensureUserProfile, updateUserProfile } from './profile-service.js';
+import { normalizeDeliveryLocation, resolveDeliveryFeeForLocation } from './delivery-fee-service.js';
 
 export interface CreateOrderInput {
   customer_email: string;
   customer_name: string;
   customer_phone: string;
   delivery_address: string;
+  delivery_location: string;
   user_id?: string;
   items: Array<{
     product_id: string;
@@ -28,6 +30,8 @@ export interface CreateAuthenticatedOrderInput {
 export interface CreateOrderResult {
   id: string;
   total_kobo: number;
+  delivery_fee_kobo: number;
+  delivery_location: string;
   status: string;
   payment_reference: string;
 }
@@ -38,6 +42,8 @@ export interface AdminOrderSummaryDTO {
   customer_name: string;
   customer_phone: string;
   delivery_address: string;
+  delivery_location: string | null;
+  delivery_fee_kobo: number;
   total_kobo: number;
   status: string;
   payment_reference: string | null;
@@ -73,20 +79,24 @@ export const createOrder = async (payload: CreateOrderInput): Promise<CreateOrde
   }
 
   const priceMap = new Map<string, number>((products ?? []).map((product: any) => [product.id, product.price_kobo]));
+  const resolvedDelivery = await resolveDeliveryFeeForLocation(payload.delivery_location);
 
-  let total_kobo = 0;
+  let items_subtotal_kobo = 0;
   const orderItems = payload.items.map((item) => {
     const unitPrice = priceMap.get(item.product_id);
     if (unitPrice === undefined) {
       throw new AppError(`Invalid product id: ${item.product_id}`, 400, 'INVALID_PRODUCT');
     }
-    total_kobo += unitPrice * item.quantity;
+    items_subtotal_kobo += unitPrice * item.quantity;
     return {
       product_id: item.product_id,
       quantity: item.quantity,
       unit_price_kobo: unitPrice,
     };
   });
+
+  const delivery_fee_kobo = resolvedDelivery.fee_kobo;
+  const total_kobo = items_subtotal_kobo + delivery_fee_kobo;
 
   const payment_reference = generateReference();
 
@@ -98,11 +108,13 @@ export const createOrder = async (payload: CreateOrderInput): Promise<CreateOrde
       customer_name: payload.customer_name,
       customer_phone: payload.customer_phone,
       delivery_address: payload.delivery_address,
+      delivery_location: resolvedDelivery.location,
+      delivery_fee_kobo,
       total_kobo,
       status: 'pending_payment',
       payment_reference,
     })
-    .select('id,total_kobo,status,payment_reference')
+    .select('id,total_kobo,delivery_fee_kobo,delivery_location,status,payment_reference')
     .single();
 
   if (orderError || !order) {
@@ -123,6 +135,8 @@ export const createOrder = async (payload: CreateOrderInput): Promise<CreateOrde
   return {
     id: order.id,
     total_kobo: order.total_kobo,
+    delivery_fee_kobo: order.delivery_fee_kobo,
+    delivery_location: order.delivery_location,
     status: order.status,
     payment_reference: order.payment_reference,
   };
@@ -148,15 +162,24 @@ export const createOrderForAuthenticatedUser = async (
     throw new AppError('Delivery address is required for checkout', 400, 'DELIVERY_ADDRESS_REQUIRED');
   }
 
-  const formattedAddress = nextDeliveryLocation
-    ? `${nextDeliveryAddress}, Lagos ${nextDeliveryLocation}`
+  if (!nextDeliveryLocation) {
+    throw new AppError('Delivery location is required for checkout', 400, 'DELIVERY_LOCATION_REQUIRED');
+  }
+
+  const canonicalDeliveryLocation = normalizeDeliveryLocation(nextDeliveryLocation);
+  if (!canonicalDeliveryLocation) {
+    throw new AppError('Delivery location must be Mainland or Island', 400, 'DELIVERY_LOCATION_INVALID');
+  }
+
+  const formattedAddress = canonicalDeliveryLocation
+    ? `${nextDeliveryAddress}, Lagos ${canonicalDeliveryLocation}`
     : nextDeliveryAddress;
 
   await updateUserProfile(userId, email, {
     full_name: nextName,
     phone: nextPhone,
     delivery_address: nextDeliveryAddress,
-    delivery_location: nextDeliveryLocation || null,
+    delivery_location: canonicalDeliveryLocation,
   });
 
   return createOrder({
@@ -165,6 +188,7 @@ export const createOrderForAuthenticatedUser = async (
     customer_name: nextName,
     customer_phone: nextPhone,
     delivery_address: formattedAddress,
+    delivery_location: canonicalDeliveryLocation,
     items: payload.items,
   });
 };
@@ -187,7 +211,7 @@ export const markOrderCompleted = async (id: string): Promise<AdminOrderSummaryD
     .update({ status: 'completed' })
     .eq('id', id)
     .eq('status', 'paid')
-    .select('id,customer_email,customer_name,customer_phone,delivery_address,total_kobo,status,payment_reference,created_at')
+    .select('id,customer_email,customer_name,customer_phone,delivery_address,delivery_location,delivery_fee_kobo,total_kobo,status,payment_reference,created_at')
     .maybeSingle();
 
   if (error) {
@@ -204,7 +228,7 @@ export const markOrderCompleted = async (id: string): Promise<AdminOrderSummaryD
 export const listOrdersAdmin = async (): Promise<AdminOrderSummaryDTO[]> => {
   const { data, error } = await supabaseAdmin
     .from('orders')
-    .select('id,customer_email,customer_name,customer_phone,delivery_address,total_kobo,status,payment_reference,created_at')
+    .select('id,customer_email,customer_name,customer_phone,delivery_address,delivery_location,delivery_fee_kobo,total_kobo,status,payment_reference,created_at')
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -217,7 +241,7 @@ export const listOrdersAdmin = async (): Promise<AdminOrderSummaryDTO[]> => {
 export const getOrderByIdAdmin = async (id: string): Promise<AdminOrderDetailsDTO> => {
   const { data: order, error: orderError } = await supabaseAdmin
     .from('orders')
-    .select('id,customer_email,customer_name,customer_phone,delivery_address,total_kobo,status,payment_reference,created_at')
+    .select('id,customer_email,customer_name,customer_phone,delivery_address,delivery_location,delivery_fee_kobo,total_kobo,status,payment_reference,created_at')
     .eq('id', id)
     .maybeSingle();
 

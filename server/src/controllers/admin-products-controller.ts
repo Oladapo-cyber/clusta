@@ -15,6 +15,8 @@ const productIdSchema = z.string().uuid();
 const createProductSchema = z.object({
   name: z.string().min(1),
   slug: z.string().min(1).optional(),
+  care_qr_id: z.number().int().positive().nullable().optional(),
+  care_youtube_url: z.string().url().nullable().optional(),
   description: z.string().nullable().optional(),
   full_description: z.string().nullable().optional(),
   image_url: z.string().url().nullable().optional(),

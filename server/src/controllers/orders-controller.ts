@@ -8,6 +8,7 @@ const createOrderSchema = z.object({
   customer_name: z.string().min(2),
   customer_phone: z.string().min(8),
   delivery_address: z.string().min(5),
+  delivery_location: z.enum(['Mainland', 'Island']),
   items: z
     .array(
       z.object({
@@ -22,7 +23,7 @@ const createAuthenticatedOrderSchema = z.object({
   customer_name: z.string().min(2).optional(),
   customer_phone: z.string().min(8).optional(),
   delivery_address: z.string().min(5).optional(),
-  delivery_location: z.string().min(2).optional(),
+  delivery_location: z.enum(['Mainland', 'Island']).optional(),
   items: z
     .array(
       z.object({

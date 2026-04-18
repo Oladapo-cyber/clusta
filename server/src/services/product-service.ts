@@ -6,6 +6,8 @@ export interface ProductDTO {
   id: string;
   name: string;
   slug: string;
+  care_qr_id: number | null;
+  care_youtube_url: string | null;
   description: string | null;
   full_description: string | null;
   image_url: string | null;
@@ -21,6 +23,8 @@ export interface ProductDTO {
 export interface CreateProductInput {
   name: string;
   slug?: string | undefined;
+  care_qr_id?: number | null | undefined;
+  care_youtube_url?: string | null | undefined;
   description?: string | null | undefined;
   full_description?: string | null | undefined;
   image_url?: string | null | undefined;
@@ -33,6 +37,8 @@ export interface CreateProductInput {
 export interface UpdateProductInput {
   name?: string | undefined;
   slug?: string | undefined;
+  care_qr_id?: number | null | undefined;
+  care_youtube_url?: string | null | undefined;
   description?: string | null | undefined;
   full_description?: string | null | undefined;
   image_url?: string | null | undefined;
@@ -65,6 +71,8 @@ const mapProduct = (row: any): ProductDTO => {
     id: row.id,
     name: row.name,
     slug: row.slug,
+    care_qr_id: row.care_qr_id ?? null,
+    care_youtube_url: row.care_youtube_url ?? null,
     description: row.description,
     full_description: row.full_description,
     image_url: imageUrls[0] ?? null,
@@ -89,7 +97,7 @@ const slugify = (value: string): string =>
 export const listProducts = async (): Promise<ProductDTO[]> => {
   const { data, error } = await supabaseAdmin
     .from('products')
-    .select('id,name,slug,description,full_description,image_url,image_urls,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
+    .select('id,name,slug,care_qr_id,care_youtube_url,description,full_description,image_url,image_urls,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
     .eq('is_active', true)
     .order('created_at', { ascending: false });
 
@@ -103,7 +111,7 @@ export const listProducts = async (): Promise<ProductDTO[]> => {
 export const getProductById = async (id: string): Promise<ProductDTO> => {
   const { data, error } = await supabaseAdmin
     .from('products')
-    .select('id,name,slug,description,full_description,image_url,image_urls,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
+    .select('id,name,slug,care_qr_id,care_youtube_url,description,full_description,image_url,image_urls,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
     .eq('id', id)
     .eq('is_active', true)
     .maybeSingle();
@@ -122,7 +130,7 @@ export const getProductById = async (id: string): Promise<ProductDTO> => {
 export const listProductsAdmin = async (): Promise<ProductDTO[]> => {
   const { data, error } = await supabaseAdmin
     .from('products')
-    .select('id,name,slug,description,full_description,image_url,image_urls,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
+    .select('id,name,slug,care_qr_id,care_youtube_url,description,full_description,image_url,image_urls,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -135,7 +143,7 @@ export const listProductsAdmin = async (): Promise<ProductDTO[]> => {
 export const getProductByIdAdmin = async (id: string): Promise<ProductDTO> => {
   const { data, error } = await supabaseAdmin
     .from('products')
-    .select('id,name,slug,description,full_description,image_url,image_urls,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
+    .select('id,name,slug,care_qr_id,care_youtube_url,description,full_description,image_url,image_urls,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
     .eq('id', id)
     .maybeSingle();
 
@@ -162,6 +170,8 @@ export const createProduct = async (input: CreateProductInput): Promise<ProductD
     .insert({
       name: input.name.trim(),
       slug,
+      care_qr_id: input.care_qr_id ?? null,
+      care_youtube_url: input.care_youtube_url?.trim() || null,
       description: input.description ?? null,
       full_description: input.full_description ?? null,
       image_url: imageUrls[0] ?? null,
@@ -170,7 +180,7 @@ export const createProduct = async (input: CreateProductInput): Promise<ProductD
       category_id: input.category_id ?? null,
       is_active: input.is_active ?? true,
     })
-    .select('id,name,slug,description,full_description,image_url,image_urls,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
+    .select('id,name,slug,care_qr_id,care_youtube_url,description,full_description,image_url,image_urls,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
     .single();
 
   if (error || !data) {
@@ -233,6 +243,14 @@ export const updateProduct = async (id: string, input: UpdateProductInput): Prom
     updatePayload.description = input.description;
   }
 
+  if (input.care_qr_id !== undefined) {
+    updatePayload.care_qr_id = input.care_qr_id;
+  }
+
+  if (input.care_youtube_url !== undefined) {
+    updatePayload.care_youtube_url = input.care_youtube_url?.trim() || null;
+  }
+
   if (input.full_description !== undefined) {
     updatePayload.full_description = input.full_description;
   }
@@ -253,7 +271,7 @@ export const updateProduct = async (id: string, input: UpdateProductInput): Prom
     .from('products')
     .update(updatePayload)
     .eq('id', id)
-    .select('id,name,slug,description,full_description,image_url,image_urls,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
+    .select('id,name,slug,care_qr_id,care_youtube_url,description,full_description,image_url,image_urls,price_kobo,category_id,is_active,created_at,updated_at,categories(name)')
     .maybeSingle();
 
   if (error) {
